@@ -50,10 +50,10 @@ uint8_t checkON_count = 0;
 //湿度、温度取得
 float humi;//=(float)(rdptr[2]*256+rdptr[3])/10.0;
 float temp;//=(float)(rdptr[4]*256+rdptr[5])/10.0;
-float an0;// = ADS.readADC(0);//ソーラーパネル出力電圧
-float an1;// = ADS.readADC(1);//バッテリー電圧
-float an2;// = ADS.readADC(2);//水分センサー上
-float an3;// = ADS.readADC(3);//水分センサー下
+float an0;// = ADS.readADC(0);//
+float an1;// = ADS.readADC(1);//
+float an2;// = ADS.readADC(2);//
+float an3;// = ADS.readADC(3);//
 
 uint32_t colors[] = {
     pixels0.Color(10, 0, 0), //0 Red
