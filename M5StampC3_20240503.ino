@@ -2,9 +2,14 @@
 #include <time.h>
 #include <Wire.h>
 #include "ADS1X15.h"//RobTillaart/ADS1X15 ライブラリ
-// #include "AM232X.h"
-// AM2315 sensor(&Wire1);
+#include <WebServer.h>
+#include <NTPClient.h>//NTPで使用
+#include <WiFiUdp.h>//NTPで使用
+
 ADS1115 ADS(0x48);
+WebServer server(80);
+WiFiUDP ntpUDP;//NTPサーバー関係
+NTPClient timeClient(ntpUDP, "ntp.nict.jp", 9*3600); // NICTのNTPサーバーを使用し、日本標準時(UTC+9)を指定
 
 hw_timer_t * timer = NULL;
 
@@ -19,7 +24,6 @@ hw_timer_t * timer = NULL;
 #define Pin_G10 10//
 #define Pin_G1 1//
 #define Pin_G0 0//
-
 #define Pin_G21 21//
 #define Pin_G20 20//
 #define Pin_G9 9//
@@ -46,14 +50,23 @@ int16_t count_beep_100 = 0;
 uint8_t onboardBTN = 0;
 uint8_t onboardBTN_re = 0;
 uint8_t checkON_count = 0;
+const char* ssid = "aterm-0dfd8a-g";// WiFi情報
+const char* pass = "9e6b4a5f07432";// WiFi情報
+int date_year; // 年
+int date_month;// 月
+int date_day;  // 日
+int date_hour; // 時
+int date_minute;// 分
+int date_second;// 秒
+int8_t parameter = 0;
 
 //湿度、温度取得
-float humi;//=(float)(rdptr[2]*256+rdptr[3])/10.0;
-float temp;//=(float)(rdptr[4]*256+rdptr[5])/10.0;
-float an0;// = ADS.readADC(0);//
-float an1;// = ADS.readADC(1);//
-float an2;// = ADS.readADC(2);//
-float an3;// = ADS.readADC(3);//
+float humi;//湿度
+float temp;//温度
+float an0;//
+float an1;//
+float an2;//
+float an3;//
 
 uint32_t colors[] = {
     pixels0.Color(10, 0, 0), //0 Red
@@ -99,7 +112,6 @@ void onTimer(){
 
 void setup() {
   pixels0.begin();  // initialize the pixel オンボードLED
-
   Serial.begin(115200);
   Wire.begin();//SDA=8,SCL=9(デフォルト)
   ADS.begin();
@@ -116,17 +128,34 @@ void setup() {
   // pinMode(0,INPUT);//
   // pinMode(1,INPUT);//
   // pinMode(4,INPUT);//
-
   //pinMode(Pin_G6, INPUT_PULLUP);//
-
-  // while (sensor.begin() == false){//AM2321用
-  //   // Serial.print(millis());
-  //   // Serial.println("\tCould not connect to sensor.");
-  //   // delay(1000);
-  // }
 
   //初期値設定
   //
+
+  // WiFiのアクセスポイントに接続
+  WiFi.begin(ssid, pass);
+  while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+  }
+  // ESP32のIPアドレスを出力
+  Serial.println("WiFi Connected.");
+  Serial.print("IP = ");
+  Serial.println(WiFi.localIP());
+  //Serial.printf("parameter=%d\r\n",parameter);
+
+  // NTPサーバーに接続
+  timeClient.begin();
+  timeClient.update();// 時刻の更新
+  date_update();
+  Serial.printf("%d/%d/%d %d:%d:%d\r\n",date_year,date_month,date_day,date_hour,date_minute,date_second);
+
+  // 処理するアドレスを定義
+  server.on("/", handleRoot);
+  server.on("/set", handleSET);
+  server.onNotFound(handleNotFound);
+  server.begin();// Webサーバーを起動
+
 
   //Serial.printf("Start.\n");
 
@@ -136,8 +165,13 @@ void loop() {
   
   io_prosess();
 
+  server.handleClient();
 
   if(count_timer_1000_one!=0){count_timer_1000_one = 0;
+
+    // getLocalTime(&timeInfo);
+    // Serial.printf("%02u/%02u/%02u\r\n", timeInfo.tm_year - 100, timeInfo.tm_mon + 1, timeInfo.tm_mday);
+    // Serial.printf("%02u:%02u:%02u\r\n", timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec);
 
     //湿度、温度取得
     byte rdptr[20];
@@ -164,41 +198,6 @@ void loop() {
 
   }
 
-  // if (millis() - sensor.lastRead() >= 2000){
-  //   //  READ DATA
-  //   uint32_t start = micros();
-  //   int status = sensor.read();
-  //   uint32_t stop = micros();
-  //   switch (status)
-  //   {
-  //   case AM2315_OK:
-  //     Serial.print("OK,\t");
-  //     break;
-  //   case AM2315_ERROR_CHECKSUM:
-  //     Serial.print("Checksum error,\t");
-  //     break;
-  //   case AM2315_ERROR_CONNECT:
-  //     Serial.print("Connect error,\t");
-  //     break;
-  //   case AM2315_MISSING_BYTES:
-  //     Serial.print("Bytes error,\t");
-  //     break;
-  //   default:
-  //     Serial.print("error <");
-  //     Serial.print(status);
-  //     Serial.print(">,\t");
-  //     break;
-  //   }
-  //   //  DISPLAY DATA, sensor has only one decimal.
-  //   Serial.print("AM2315, \t");
-  //   Serial.print(sensor.getHumidity(), 1);
-  //   Serial.print(",\t");
-  //   Serial.print(sensor.getTemperature(), 1);
-  //   Serial.print(",\t");
-  //   Serial.print(stop - start);
-  //   Serial.print("\n");
-  // }
-
 }
 
 void io_prosess(){
@@ -221,8 +220,6 @@ void io_prosess(){
     pixels0.show();
   }
 
-
-
   //アナログ入力
   //int an0 = analogRead(0);
 
@@ -232,8 +229,7 @@ void io_prosess(){
 
 }
 
-void readAM2321(byte *rdptr, byte length ) 
-{
+void readAM2321(byte *rdptr, byte length ) {
   int i;
   byte  deviceaddress=0x5C;
   //step1
@@ -258,4 +254,95 @@ void readAM2321(byte *rdptr, byte length )
       rdptr[i] = Wire.read();
     }
   }
+}
+
+void date_update(){
+    // Unix時間を取得
+    unsigned long unixTime = timeClient.getEpochTime();
+    // Unix時間をローカル時間に変換
+    struct tm *timeinfo;
+    timeinfo = localtime((const time_t *)&unixTime);
+    // 日時要素の取得
+    date_year = timeinfo->tm_year + 1900; // 年
+    date_month = timeinfo->tm_mon + 1;     // 月
+    date_day = timeinfo->tm_mday;          // 日
+    date_hour = timeinfo->tm_hour;         // 時
+    date_minute = timeinfo->tm_min;        // 分
+    date_second = timeinfo->tm_sec;        // 秒
+}
+
+// ルート画面
+void handleRoot(void){
+    String html;
+    char buffer[20]; // 文字列を格納するためのバッファ
+
+    date_update();//日時を更新
+
+    // HTMLを組み立てる
+    html = "<!DOCTYPE html><html><head><meta charset='utf-8'>";
+    html += "<title>parameterを1/0する</title></head><body>";
+    html += "<p>リンクをクリックするとparameterが1/0します</p>";
+    html += "<a href='/set?p=1'>1</a><br>";
+    html += "<a href='/set?p=0'>0</a>";
+    html += "<form action='set' method='get'>";
+    html += "   <select name='p'>";
+    html += "     <option value='10'>10</option>";
+    html += "     <option value='11'>11</option>";
+    html += "   </select>";
+    html += "<input type='submit' value='Submit'>";
+    html += "</form>";
+    sprintf(buffer, "%d/%d/%d %d:%d:%d\r\n",date_year,date_month,date_day,date_hour,date_minute,date_second);
+    html += buffer;
+    html += "</body></html>";
+
+    // HTMLを出力する
+    server.send(200, "text/html", html);
+}
+
+// 
+void handleSET(void){
+    String html;
+
+    // 「/led?s=○」のパラメータが指定されているかどうかを確認
+    if (server.hasArg("p"))
+    {
+
+        html = "<!DOCTYPE html><html><head><meta charset='utf-8'>";
+        html += "<title>parameterを1/0する</title></head><body>";
+
+        // 「○」の値に応じて、LEDをON/OFFする
+        if (server.arg("p").equals("1")){
+            parameter = 1;
+            //digitalWrite(4, HIGH);
+
+            html += "<p>parameterを1にしました</p>";
+        }else if (server.arg("p").equals("0")){
+            parameter = 0;
+            html += "<p>parameterを0にしました</p>";
+        }else if (server.arg("p").equals("10")){
+            parameter = 10;
+            html += "<p>parameterを10にしました</p>";
+        }else if (server.arg("p").equals("11")){
+            parameter = 11;
+            html += "<p>parameterを11にしました</p>";
+
+        }else{
+            html += "パラメータが正しく指定されていません";
+
+        }
+
+        html += "<a href='#' onclick='history.back(); return false;'>back</a>";
+        html += "</body></html>";
+
+        Serial.printf("parameter=%d\r\n",parameter);
+    }
+
+    // 変数msgの文字列を送信する
+    server.send(200, "text/html", html);
+    //server.send(200, "text/plain; charset=utf-8", msg);
+}
+
+// 存在しないアドレスが指定された時の処理
+void handleNotFound(void){
+    server.send(404, "text/plain", "Not Found.");
 }
