@@ -220,6 +220,8 @@ void io_prosess(){
     pixels0.show();
   }
 
+
+
   //アナログ入力
   //int an0 = analogRead(0);
 
@@ -274,7 +276,7 @@ void date_update(){
 // ルート画面
 void handleRoot(void){
     String html;
-    char buffer[20]; // 文字列を格納するためのバッファ
+    char buffer[50]; // 文字列を格納するためのバッファ
 
     date_update();//日時を更新
 
@@ -291,8 +293,11 @@ void handleRoot(void){
     html += "   </select>";
     html += "<input type='submit' value='Submit'>";
     html += "</form>";
-    sprintf(buffer, "%d/%d/%d %d:%d:%d\r\n",date_year,date_month,date_day,date_hour,date_minute,date_second);
+    sprintf(buffer, "Current date and time:%d/%d/%d %d:%d:%d<br>",date_year,date_month,date_day,date_hour,date_minute,date_second);
     html += buffer;
+    html += "Temperature[℃] = " + String(temp) + "<br>";
+    html += "Humidity[%] = " + String(humi) + "<br>";
+    html += "AnalogValue[V] = " + String(an0) + "," + String(an1) + String(an2) + "," + String(an3) + "<br>";
     html += "</body></html>";
 
     // HTMLを出力する
