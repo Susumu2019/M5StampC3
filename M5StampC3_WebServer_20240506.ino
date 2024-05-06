@@ -8,16 +8,24 @@ WebServer server(80);
 // WiFi情報
 const char* ssid = "aterm-0dfd8a-g";
 const char* pass = "9e6b4a5f07432";
-
+int date_year; // 年
+int date_month;// 月
+int date_day;  // 日
+int date_hour; // 時
+int date_minute;// 分
+int date_second;// 秒
 int8_t parameter = 0;
 
 //NTPサーバー関係
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "ntp.nict.jp", 9*3600); // NICTのNTPサーバーを使用し、日本標準時(UTC+9)を指定
 
-// 初期画面
+// ルート画面
 void handleRoot(void){
     String html;
+    char buffer[20]; // 文字列を格納するためのバッファ
+
+    date_update();
 
     // HTMLを組み立てる
     html = "<!DOCTYPE html><html><head><meta charset='utf-8'>";
@@ -32,8 +40,9 @@ void handleRoot(void){
     html += "   </select>";
     html += "<input type='submit' value='Submit'>";
     html += "</form>";
+    sprintf(buffer, "%d/%d/%d %d:%d:%d\r\n",date_year,date_month,date_day,date_hour,date_minute,date_second);
+    html += buffer;
     html += "</body></html>";
-
 
     // HTMLを出力する
     server.send(200, "text/html", html);
@@ -88,8 +97,7 @@ void handleNotFound(void){
 }
 
 // 初期化
-void setup()
-{
+void setup(){
     // シリアルポートの初期化
     Serial.begin(115200);
 
@@ -109,21 +117,33 @@ void setup()
 
     // NTPサーバーに接続
     timeClient.begin();
-    // 時刻の更新
-    timeClient.update();
-    // 時刻の取得
-    Serial.println(timeClient.getFormattedTime());    
+    timeClient.update();// 時刻の更新
+    date_update();
+    Serial.printf("%d/%d/%d %d:%d:%d\r\n",date_year,date_month,date_day,date_hour,date_minute,date_second);
 
     // 処理するアドレスを定義
     server.on("/", handleRoot);
     server.on("/set", handleSET);
     server.onNotFound(handleNotFound);
-    // Webサーバーを起動
-    server.begin();
+    server.begin();// Webサーバーを起動
+}
+
+void date_update(){
+    // Unix時間を取得
+    unsigned long unixTime = timeClient.getEpochTime();
+    // Unix時間をローカル時間に変換
+    struct tm *timeinfo;
+    timeinfo = localtime((const time_t *)&unixTime);
+    // 日時要素の取得
+    date_year = timeinfo->tm_year + 1900; // 年
+    date_month = timeinfo->tm_mon + 1;     // 月
+    date_day = timeinfo->tm_mday;          // 日
+    date_hour = timeinfo->tm_hour;         // 時
+    date_minute = timeinfo->tm_min;        // 分
+    date_second = timeinfo->tm_sec;        // 秒
 }
 
 // 処理ループ
-void loop()
-{
+void loop(){
     server.handleClient();
 }
