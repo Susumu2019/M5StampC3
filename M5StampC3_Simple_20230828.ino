@@ -3,8 +3,8 @@
 #include <Adafruit_NeoPixel.h>
 #define LED_PIN 2
 #define COLOR_REPEAT 2
-const char* ssid     = "aterm-0dfd8a-g";
-const char* password = "9e6b4a5f07432";
+const char* ssid     = "";
+const char* password = "";
 
 WiFiServer server(80);
 // create a pixel strand with 1 pixel on PIN_NEOPIXEL
